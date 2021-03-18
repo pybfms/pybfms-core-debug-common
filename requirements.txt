@@ -1,0 +1,7 @@
+
+pyelftools
+cocotb
+
+-e git+ssh://git@github.com/fvutils/pyhvl-rpc.git#egg=pyhvl-rpc
+-e git+ssh://git@github.com/pybfms/pybfms.git#egg=pybfms
+
