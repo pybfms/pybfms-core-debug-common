@@ -3,54 +3,56 @@ Created on Feb 21, 2021
 
 @author: mballance
 '''
+import hvlrpc
 
-class ParamsIterator(object):
+class ParamsIterator(hvlrpc.va_list):
     
     def __init__(self):
+        super().__init__()
         pass
     
-    def next8(self) -> int:
+    def int8(self) -> int:
         """Returns the next 8-bit parameter"""
-        raise NotImplementedError("next8 not implemented")
+        raise NotImplementedError("int8 not implemented")
     
-    def nextu8(self) -> int:
+    def uint8(self) -> int:
         """Returns the next 8-bit parameter"""
-        raise NotImplementedError("next8 not implemented")
+        raise NotImplementedError("uint8 not implemented")
     
-    def next16(self) -> int:
+    def int16(self) -> int:
         """Returns the next 16-bit parameter"""
-        raise NotImplementedError("next8 not implemented")
+        raise NotImplementedError("int16 not implemented")
     
-    def nextu16(self) -> int:
-        """Returns the next 16-bit parameter"""
-        raise NotImplementedError("next8 not implemented")
+    def uint16(self) -> int:
+        """Returns the next unsigned 16-bit parameter"""
+        raise NotImplementedError("uint16 not implemented")
     
-    def next32(self) -> int:
+    def int32(self) -> int:
         """Returns the next 32-bit parameter"""
-        raise NotImplementedError("next32 not implemented")
+        raise NotImplementedError("int32 not implemented in " + str(self))
     
-    def nextu32(self) -> int:
+    def uint32(self) -> int:
         """Returns the next 32-bit parameter"""
-        raise NotImplementedError("next32 not implemented")
+        raise NotImplementedError("uint32 not implemented")
     
-    def next64(self) -> int:
+    def int64(self) -> int:
         """Returns the next 64-bit parameter"""
-        raise NotImplementedError("next64 not implemented")
+        raise NotImplementedError("int64 not implemented")
     
-    def nextu64(self) -> int:
+    def uint64(self) -> int:
         """Returns the next 64-bit parameter"""
-        raise NotImplementedError("next64 not implemented")
+        raise NotImplementedError("uint64 not implemented")
     
-    def nextptr(self) -> int:
+    def ptr(self) -> int:
         """Returns the next pointer parameter"""
-        raise NotImplementedError("nextptr not implemented")
+        raise NotImplementedError("ptr not implemented")
     
-    def nextstr(self) -> str:
+    def str(self) -> str:
         """Returns the next string-type (const char *) parameter"""
-        raise NotImplementedError("nextstr not implemented")
+        raise NotImplementedError("str not implemented")
     
-    def nextva(self) -> 'ParamsIterator':
+    def va(self) -> 'ParamsIterator':
         """Returns the an iterator for variadic params"""
-        raise NotImplementedError("nextva not implemented")
+        raise NotImplementedError("va not implemented")
     
     

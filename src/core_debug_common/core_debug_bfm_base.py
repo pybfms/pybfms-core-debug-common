@@ -78,7 +78,6 @@ class CoreDebugBfmBase(hvlrpc.Endpoint):
                 ev : ExecEvent):
         """Called by the BFM specialiation to notify of an exec event"""
 
-        print("addr=" + str(addr) + " " + str(addr in self.addr2method_m.keys()))
         if ev & ExecEvent.Call and addr in self.addr2method_m.keys():
             # This is a method that must be reflected back to Python
             self._do_method_call(self.addr2method_m[addr])
@@ -113,18 +112,18 @@ class CoreDebugBfmBase(hvlrpc.Endpoint):
         
         # Lookup all the symbols 
         for m in apidef.methods:
-            print("m=" + m.name)
             addr = self.sym2addr(m.name)
+            print("m=" + m.name + " addr=" + hex(addr))
             self.addr2method_m[addr] = m
             
     def _do_method_call(self, m : MethodDef):
         p_iter = self.param_iter()
-        pm = { ctypes.c_int8 : p_iter.next8, ctypes.c_uint8 : p_iter.nextu8,
-            ctypes.c_int16 : p_iter.next16, ctypes.c_uint16 : p_iter.nextu16,
-            ctypes.c_int32 : p_iter.next32, ctypes.c_uint32 : p_iter.nextu32,
-            ctypes.c_int64 : p_iter.next64, ctypes.c_uint64 : p_iter.nextu64,
-            ctypes.c_void_p : p_iter.nextptr, str : p_iter.nextstr,
-            va_list : p_iter.nextva}
+        pm = { ctypes.c_int8 : p_iter.int8, ctypes.c_uint8 : p_iter.uint8,
+            ctypes.c_int16 : p_iter.int16, ctypes.c_uint16 : p_iter.uint16,
+            ctypes.c_int32 : p_iter.int32, ctypes.c_uint32 : p_iter.uint32,
+            ctypes.c_int64 : p_iter.int64, ctypes.c_uint64 : p_iter.uint64,
+            ctypes.c_void_p : p_iter.ptr, str : p_iter.str,
+            va_list : p_iter.va}
             
         params = []
         for p in m.params:
