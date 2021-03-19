@@ -3,17 +3,26 @@ Created on Feb 7, 2021
 
 @author: mballance
 '''
-import hvlrpc
-from core_debug_common.mem_model import MemModel
-from core_debug_common.params_iterator import ParamsIterator
+import ctypes
+from enum import IntFlag, auto
+from typing import List
+
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from hvlrpc.api_rgy import ApiRgy
-from core_debug_common.method_call_data import MethodCallData
-from hvlrpc.methoddef import MethodDef
-from typing import List
-import ctypes
+
+from core_debug_common.mem_model import MemModel
+from core_debug_common.params_iterator import ParamsIterator
 from hvlrpc import va_list
+import hvlrpc
+from hvlrpc.api_rgy import ApiRgy
+from hvlrpc.methoddef import MethodDef
+from builtins import int
+
+
+class ExecEvent(IntFlag):
+    Call = auto()
+    Ret = auto()
+    Exc = auto()
 
 class CoreDebugBfmBase(hvlrpc.Endpoint):
     
@@ -66,11 +75,11 @@ class CoreDebugBfmBase(hvlrpc.Endpoint):
                     
     def execute(self, 
                 addr : int,
-                is_call : bool,
-                is_ret : bool):
+                ev : ExecEvent):
         """Called by the BFM specialiation to notify of an exec event"""
-        
-        if is_call and addr in self.addr2method_m.keys():
+
+        print("addr=" + str(addr) + " " + str(addr in self.addr2method_m.keys()))
+        if ev & ExecEvent.Call and addr in self.addr2method_m.keys():
             # This is a method that must be reflected back to Python
             self._do_method_call(self.addr2method_m[addr])
             
@@ -104,6 +113,7 @@ class CoreDebugBfmBase(hvlrpc.Endpoint):
         
         # Lookup all the symbols 
         for m in apidef.methods:
+            print("m=" + m.name)
             addr = self.sym2addr(m.name)
             self.addr2method_m[addr] = m
             
