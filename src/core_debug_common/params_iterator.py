@@ -5,7 +5,7 @@ Created on Feb 21, 2021
 '''
 import hvlrpc
 
-class ParamsIterator(hvlrpc.va_list):
+class ParamsIterator(object):
     
     def __init__(self):
         super().__init__()
