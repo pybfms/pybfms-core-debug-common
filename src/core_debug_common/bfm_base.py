@@ -22,9 +22,9 @@ from hvlrpc.methoddef import MethodDef
 
 
 class ExecEvent(IntFlag):
-    Call = auto(), "Instruction is the first of a new function"
-    Ret = auto(), "Instruction is the first after returning from a function"
-    Exc = auto(), "Instruction is first in exception handler"
+    Call = auto() # "Instruction is the first of a new function"
+    Ret = auto()  # "Instruction is the first after returning from a function"
+    Exc = auto()  # "Instruction is first in exception handler"
 
 class BfmBase(hvlrpc.Endpoint):
     
@@ -55,11 +55,14 @@ class BfmBase(hvlrpc.Endpoint):
         
         self.addr2sym_m = {}
         self.sym2addr_m = {}
+        
+        self.filter_m = {}
 
         # Create a default thread and initial stack frame
-        init_t = ThreadInfo("<default>")
+        init_t = self.create_thread("<default>")
         init_t.callstack.append(StackFrame(0, "<initial>", False))
-        
+       
+        self.active_thread = init_t
         self.threads : List[ThreadInfo] = [init_t]
 
         # Map of addresses to methods we'll call        
@@ -85,20 +88,35 @@ class BfmBase(hvlrpc.Endpoint):
         if sym is None:
             self.on_entry_cb.append(f)
         else:
-            if sym not in self.sym2addr_m.keys():
-                raise Exception("Symbol \"%s\" is not defined" % sym)
-#        self.on_entry_cb.append
-        pass
+            addr = -1
+            if isinstance(sym, str):
+                if sym not in self.sym2addr_m.keys():
+                    raise Exception("Symbol \"%s\" is not defined" % sym)
+                else:
+                    addr = self.sym2addr_m[sym]
+            else:
+                addr = sym
+                
+            def filter_cb(pc):
+                if pc == addr:
+                    f(pc)
+            
+            self.filter_m[f] = filter_cb
+            self.on_entry_cb.append(filter_cb)
     
     def del_on_entry_cb(self, f):
-        pass
+        if f in self.filter_m.keys():
+            self.on_entry_cb.remove(self.filter_m[f]) 
+            self.filter_m.pop(f)
+        else:
+            self.on_entry_cb.remove(f)
     
     def add_on_exit_cb(self, sym, f):
         """Adds a callback on an symbol or symbols"""
-        pass
+        self.on_exit_cb.append(f)
     
     def del_on_exit_cb(self, f):
-        pass
+        self.on_exit_cb.remove(f)
     
     def load_elf(self, elf_path):
         """Specifies the software image running on the core being monitored"""
@@ -121,7 +139,6 @@ class BfmBase(hvlrpc.Endpoint):
             for i in range(elffile.num_sections()):
                 shdr = elffile._get_section_header(i)
                 name = shstrtab.get_string(shdr['sh_name'])
-                print("section: " + str(name) + " size=" + str(shdr['sh_size']) + " flags=" + hex(shdr['sh_flags']))
                 # Load all allocated sections. This will cover .bss as well
                 if shdr['sh_size'] != 0 and (shdr['sh_flags'] & 0x2):
                     section = elffile.get_section(i)
@@ -242,6 +259,11 @@ class BfmBase(hvlrpc.Endpoint):
     
         # Return the address actually hit    
         return ev.data
+    
+    def create_thread(self, tid):
+        """Creates a class derived from ThreadInfo"""
+        # Note: should delegate to the OS-awareness class
+        return ThreadInfo(tid)
 
     def disasm(self, addr, instr):
         raise NotImplementedError("disasm not implemented by class " + str(self))
@@ -262,7 +284,7 @@ class BfmBase(hvlrpc.Endpoint):
                 cb(addr, instr)
 
         if ev & ExecEvent.Call:
-            self._do_enter(addr)
+            self._do_enter(addr, retaddr)
         elif ev & ExecEvent.Ret:
             self._do_exit(addr)
         else:
@@ -289,7 +311,7 @@ class BfmBase(hvlrpc.Endpoint):
             sym = self.addr2sym_m[addr]
         else:
             sym = "<unknown " + hex(addr) + ">"
-
+            
         # Record the expected return address            
         self.active_thread.callstack[-1].retaddr = retaddr
 
@@ -314,30 +336,33 @@ class BfmBase(hvlrpc.Endpoint):
         if len(self.active_thread.callstack) == 0:
             raise Exception("Attempting to return with empty callstack")
         
-        frame = self.active_thread.callstack.pop()
+        
         
         if len(self.active_thread.callstack) == 0:
             raise Exception("Return results in empty callstack")
+        
+        frame = self.active_thread.callstack.pop()
         
         if addr != self.active_thread.callstack[-1].retaddr:
             raise Exception("Expected return address of 0x%08x ; received 0x%08x" % 
                             (self.active_thread.callstack[-1].retaddr, addr))
 
         # Allow the specialization BFM to react        
-        self.exit()
+        self.exit(frame)
         
         # Invoke all on-exit callbacks
         if len(self.on_exit_cb):
-            for cb in self.on_entry_cb.copy():
-                cb(addr)
+            for cb in self.on_exit_cb.copy():
+                # Pass the entry address of the function
+                cb(frame.addr)
     
-    def enter(self, frame : StackFrame): 
+    def enter(self):
         """Called when a function is entered. The function will be
         top of the active thread's stack
         """
         pass
     
-    def exit(self, frame : StackFrame): 
+    def exit(self, frame : StackFrame):
         """Called after a function is exiting. This event is triggered on
         the instruction after the return completes"""
         pass
@@ -371,7 +396,6 @@ class BfmBase(hvlrpc.Endpoint):
         # Lookup all the symbols 
         for m in apidef.methods:
             addr = self.sym2addr(m.name)
-            print("m=" + m.name + " addr=" + hex(addr))
             self.addr2method_m[addr] = m
             
     def _do_method_call(self, m : MethodDef):
