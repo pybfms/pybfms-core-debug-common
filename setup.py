@@ -56,7 +56,8 @@ setup(
   install_requires=[
     'cocotb',
     'pybfms',
-    'pyelftools'
+    'pyelftools',
+    'pyhvl-rpc'
   ],
 )
 
