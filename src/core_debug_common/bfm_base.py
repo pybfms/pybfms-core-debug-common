@@ -172,14 +172,12 @@ class BfmBase(hvlrpc.Endpoint):
             
         ev = pybfms.event()
 
-        def waiter(pc):
+        def waiter(pc, instr):
             if pc in target_addr_s:
                 ev.set(pc)
 
         self.add_on_exec_cb(waiter)
-
         await ev.wait()
-        
         self.del_on_exec_cb(waiter)
     
         # Return the address actually hit    
