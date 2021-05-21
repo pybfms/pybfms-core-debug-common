@@ -22,6 +22,9 @@ class CallframeWindowMgr(object):
         self.frame_start_idx = 0
         self.frame_end_idx = 0
         
+    def set_thread(self, active_thread):
+        self.callstack_thread = None
+        self.enter(active_thread)
 
     def enter(self, active_thread):
         # Update start is the starting frame (0..7) to update

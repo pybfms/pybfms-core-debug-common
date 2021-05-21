@@ -23,8 +23,9 @@ from hvlrpc.methoddef import MethodDef
 
 class ExecEvent(IntFlag):
     Call = auto() # "Instruction is the first of a new function"
-    Ret = auto()  # "Instruction is the first after returning from a function"
-    Exc = auto()  # "Instruction is first in exception handler"
+    Ret  = auto()  # "Instruction is the first after returning from a function"
+    Excp = auto()  # "Instruction is first in exception handler"
+    Eret = auto()  # "Instruction is first after returning from exeception handler"
 
 class BfmBase(hvlrpc.Endpoint):
     
@@ -41,6 +42,7 @@ class BfmBase(hvlrpc.Endpoint):
         self.mm = MemModel(addr_width, data_width, little_endian)
         
         self.memwrite_cb = []
+        self.memread_cb = []
 
         # Callbacks activated on each instruction execution        
         self.on_exec_cb = []
@@ -48,6 +50,8 @@ class BfmBase(hvlrpc.Endpoint):
         # Callbacks activated on each entry/exit        
         self.on_entry_cb = []
         self.on_exit_cb = []
+        self.on_excp_cb = []
+        self.on_eret_cb = []
         
         # Callbacks activated on specific entry/exit
         self.on_sym_entry_cb = {}
@@ -64,9 +68,16 @@ class BfmBase(hvlrpc.Endpoint):
        
         self.active_thread = init_t
         self.threads : List[ThreadInfo] = [init_t]
+        self.exc_thread_s : List[ThreadInfo] = []
 
         # Map of addresses to methods we'll call        
         self.addr2method_m = {}
+        
+    def add_memread_cb(self, f):
+        self.memread_cb.append(f)
+        
+    def del_memread_cb(self, f):
+        self.memread_cb.remove(f)
         
     def add_memwrite_cb(self, f):
         """Adds a callback function to be called on each mem write"""
@@ -83,7 +94,7 @@ class BfmBase(hvlrpc.Endpoint):
     def del_on_exec_cb(self, f):
         self.on_exec_cb.remove(f)
         
-    def add_on_entry_cb(self, sym, f):
+    def add_on_entry_cb(self, f, sym=None):
         """Adds a callback on a symbol or symbols"""
         if sym is None:
             self.on_entry_cb.append(f)
@@ -110,13 +121,25 @@ class BfmBase(hvlrpc.Endpoint):
             self.filter_m.pop(f)
         else:
             self.on_entry_cb.remove(f)
-    
-    def add_on_exit_cb(self, sym, f):
+            
+    def add_on_exit_cb(self, f, sym=None):
         """Adds a callback on an symbol or symbols"""
         self.on_exit_cb.append(f)
     
     def del_on_exit_cb(self, f):
         self.on_exit_cb.remove(f)
+        
+    def add_on_excp_cb(self, f):
+        self.on_excp_cb.append(f)
+        
+    def del_on_excp_cb(self, f):
+        self.on_excp_cb.remove(f)
+        
+    def add_on_eret_cb(self, f):
+        self.on_eret_cb.append(f)
+        
+    def del_on_eret_cb(self, f):
+        self.on_eret_cb.remove(f)
     
     def load_elf(self, elf_path):
         """Specifies the software image running on the core being monitored"""
@@ -212,7 +235,7 @@ class BfmBase(hvlrpc.Endpoint):
             if pc in target_addr_s:
                 ev.set(pc)
 
-        self.add_on_entry_cb(None, waiter)
+        self.add_on_entry_cb(waiter)
 
         await ev.wait()
         
@@ -249,7 +272,7 @@ class BfmBase(hvlrpc.Endpoint):
             if pc in target_addr_s:
                 ev.set(pc)
 
-        self.add_on_exit_cb(None, waiter)
+        self.add_on_exit_cb(waiter)
 
         await ev.wait()
         
@@ -276,6 +299,10 @@ class BfmBase(hvlrpc.Endpoint):
                 instr   : int,
                 ev      : ExecEvent):
         """Called by the BFM specialization to notify of an exec event"""
+       
+#        if ev != 0:
+#            print("Execute %s: 0x%08x retaddr=0x%08x ev=%s" % (
+#                self.bfm_info.inst_name, addr, retaddr, str(ev)))
         
         if len(self.on_exec_cb) > 0:
             for cb in self.on_exec_cb.copy():
@@ -285,22 +312,36 @@ class BfmBase(hvlrpc.Endpoint):
             self._do_enter(addr, retaddr)
         elif ev & ExecEvent.Ret:
             self._do_exit(addr)
+        elif ev & ExecEvent.Excp:
+            self._do_excp(addr)
+        elif ev & ExecEvent.Eret:
+            self._do_eret(addr)
         else:
+            # TODO: isn't this really independent of call/ret?
+            
             # Determine if we hit a symbol
             if addr in self.addr2sym_m.keys():
                 # This is a known symbol
                 pass
             pass
+        
+    def memread(self, iaddr, raddr, rdata, rmask):
+        if len(self.memread_cb) > 0:
+            for cb in self.memread_cb.copy():
+                cb(iaddr, raddr, rdata, rmask)
+        
+        
 
-    def memwrite(self, waddr, wdata, wmask):
+    def memwrite(self, iaddr, waddr, wdata, wmask):
         """Called by the BFM specialiation to notify of a memory write"""
         
         # Update the mirror memory
         self.mm.write_word(waddr, wdata, wmask)
         
         # Activate any callbacks
-        for cb in self.memwrite_cb.copy():
-            cb(waddr, wdata, wmask)
+        if len(self.memwrite_cb) > 0:
+            for cb in self.memwrite_cb.copy():
+                cb(iaddr, waddr, wdata, wmask)
     
     def _do_enter(self, addr, retaddr):
             
@@ -342,8 +383,8 @@ class BfmBase(hvlrpc.Endpoint):
         frame = self.active_thread.callstack.pop()
         
         if addr != self.active_thread.callstack[-1].retaddr:
-            raise Exception("Expected return address of 0x%08x ; received 0x%08x" % 
-                            (self.active_thread.callstack[-1].retaddr, addr))
+            raise Exception("%s: Expected return address of 0x%08x ; received 0x%08x" % 
+                            (self.bfm_info.inst_name, self.active_thread.callstack[-1].retaddr, addr))
 
         # Allow the specialization BFM to react        
         self.exit(frame)
@@ -353,7 +394,33 @@ class BfmBase(hvlrpc.Endpoint):
             for cb in self.on_exit_cb.copy():
                 # Pass the entry address of the function
                 cb(frame.addr)
+                
+    def _do_excp(self, addr):
+        
+        # Save the previously-active thread
+        self.exc_thread_s.append(self.active_thread)
+        
+        # Create an exception thread-info
+        self.active_thread = ThreadInfo("<exception>")
+        self.active_thread.callstack.append(StackFrame(0, "<initial>", False))
+        
+        self.excp()
+        
+        if len(self.on_excp_cb) > 0:
+            for cb in self.on_excp_cb.copy():
+                cb(addr)
     
+    def _do_eret(self, addr):
+        
+        # Restore the previously-active thread
+        self.active_thread = self.exc_thread_s.pop()
+        
+        self.eret()
+    
+        if len(self.on_eret_cb) > 0:
+            for cb in self.on_eret_cb.copy():
+                cb(addr)
+                
     def enter(self):
         """Called when a function is entered. The function will be
         top of the active thread's stack
@@ -363,6 +430,14 @@ class BfmBase(hvlrpc.Endpoint):
     def exit(self, frame : StackFrame):
         """Called after a function is exiting. This event is triggered on
         the instruction after the return completes"""
+        pass
+    
+    def excp(self):
+        """Called when an exception is signaled"""
+        pass
+    
+    def eret(self):
+        """Called when a return-from-exception is signaled"""
         pass
     
     def param_iter(self) -> ParamsIterator:
