@@ -307,15 +307,17 @@ class BfmBase(hvlrpc.Endpoint):
         if len(self.on_exec_cb) > 0:
             for cb in self.on_exec_cb.copy():
                 cb(addr, instr)
+                
+        
 
-        if ev & ExecEvent.Call:
+        if ev & ExecEvent.Excp:
+            self._do_excp(addr, ev)
+        elif ev & ExecEvent.Eret:
+            self._do_eret(addr, ev)
+        elif ev & ExecEvent.Call:
             self._do_enter(addr, retaddr)
         elif ev & ExecEvent.Ret:
             self._do_exit(addr)
-        elif ev & ExecEvent.Excp:
-            self._do_excp(addr)
-        elif ev & ExecEvent.Eret:
-            self._do_eret(addr)
         else:
             # TODO: isn't this really independent of call/ret?
             
@@ -395,9 +397,10 @@ class BfmBase(hvlrpc.Endpoint):
                 # Pass the entry address of the function
                 cb(frame.addr)
                 
-    def _do_excp(self, addr):
+    def _do_excp(self, addr, ev):
         
         # Save the previously-active thread
+        self.active_thread.pending_ev = ev
         self.exc_thread_s.append(self.active_thread)
         
         # Create an exception thread-info
@@ -410,10 +413,14 @@ class BfmBase(hvlrpc.Endpoint):
             for cb in self.on_excp_cb.copy():
                 cb(addr)
     
-    def _do_eret(self, addr):
+    def _do_eret(self, addr, ev):
         
         # Restore the previously-active thread
         self.active_thread = self.exc_thread_s.pop()
+        
+        if self.active_thread.pending_ev != 0:
+            print("TODO: pending ev: " + str(self.active_thread.pending_ev))
+            self.active_thread.pending_ev = 0
         
         self.eret()
     

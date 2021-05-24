@@ -13,3 +13,4 @@ class ThreadInfo(object):
         self.tid = tid
         self.stack_base = -1
         self.callstack : List[StackFrame] = []
+        self.pending_ev = 0
