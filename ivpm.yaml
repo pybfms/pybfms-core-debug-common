@@ -1,25 +1,20 @@
 package:
     name: pybfms-core-debug-common
-    version: None
-    deps:
-        - name: pyelftools
-          type: python
-          src: pypi
-        - name: cocotb
-          type: python
-          src: pypi
-        - name: pyhvl-rpc
-          url: https://github.com/fvutils/pyhvl-rpc.git
-        - name: pybfms
-          src: pypi
+
+    dep-sets:
+    - name: default
+      deps:
+      - name: pyelftools
+        type: python
+        src: pypi
     dev-deps:
-        - name: pyelftools
-          type: python
-          src: pypi
-        - name: cocotb
-          type: python
-          src: pypi
-        - name: pyhvl-rpc
-          url: https://github.com/fvutils/pyhvl-rpc.git
-        - name: pybfms
-          src: pypi
+    - name: pyelftools
+      type: python
+      src: pypi
+    - name: cocotb
+      type: python
+      src: pypi
+    - name: pyhvl-rpc
+      url: https://github.com/fvutils/pyhvl-rpc.git
+    - name: pybfms
+      src: pypi
